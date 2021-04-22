@@ -1,0 +1,76 @@
+from flask import Flask, render_template, session, url_for,redirect
+# these 2 used when Postman API  - request,jsonify
+import numpy as np
+from flask_wtf import FlaskForm
+from wtforms import TextField, SubmitField 
+from tensorflow.keras.models import load_model
+import joblib
+
+def return_prediction(model, scaler, sample_json):
+    
+    s_len = sample_json['SepalLengthCm']
+    s_wid = sample_json['SepalWidthCm']
+    p_len = sample_json['PetalLengthCm']
+    p_wid = sample_json['PetalWidthCm']
+    
+    flower = [[s_len,s_wid, p_len,p_wid]]
+    classes = np.array(['Iris-setosa', 'Iris-versicolor', 'Iris-virginica'])
+    flower = scaler.transform(flower)
+    class_ind = model.predict_classes(flower)
+    
+    return classes[class_ind][0]
+
+
+app = Flask(__name__)
+app.config['SECRET_KEY'] = 'mysecretkey'
+
+class FlowerForm(FlaskForm):
+
+	sep_len = TextField("Sepal Length")
+	sep_wid = TextField("Sepal Width")
+	pet_len = TextField("Petal Length")
+	pet_wid = TextField("Petal Width")
+
+	submit = SubmitField("Analyze")
+
+
+@app.route("/", methods=['GET', 'POST'])
+def index():
+	#return '<h1>FLASK APP IS RUNNING</h1>'
+	form = FlowerForm()
+
+	if form.validate_on_submit():
+
+		session['sep_len'] = form.sep_len.data
+		session['sep_wid'] = form.sep_wid.data
+		session['pet_len'] = form.pet_len.data
+		session['pet_wid'] = form.pet_wid.data
+
+		return redirect(url_for("prediction"))
+
+	return render_template('home.html', form=form)
+
+
+flower_model = load_model('final_iris_model.h5')
+flower_scaler = joblib.load('iris_scaler.pkl')
+
+#@app.route('/api/flower',methods=['POST']) - this is when API is used
+@app.route('/prediction')
+def prediction():
+	#content = request.json - this is when API is used
+	content = {}
+
+	content['SepalLengthCm'] = float(session['sep_len'])
+	content['SepalWidthCm'] = float(session['sep_wid'])
+	content['PetalLengthCm'] = float(session['pet_len'])
+	content['PetalWidthCm'] = float(session['pet_wid'])
+
+	results = return_prediction(flower_model, flower_scaler, content)
+	#return jsonify(results) -ths is when API is used
+	return render_template('prediction.html', results=results)
+	
+
+
+
+if __name__=='__main__':
+	app.run()
